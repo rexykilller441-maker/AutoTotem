@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "autoinventorytotem",
+  "version": "1.0.0",
+  "name": "AutoInventoryTotem",
+  "description": "Automatically refills totems in offhand and configured hotbar slot",
+  "authors": [
+    "YourName"
+  ],
+  "contact": {
+    "homepage": "",
+    "sources": ""
+  },
+  "license": "MIT",
+  "icon": "assets/autoinventorytotem/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.autototem.AutoInventoryTotem"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": "~1.21",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "another-mod": "*"
+  }
+}
