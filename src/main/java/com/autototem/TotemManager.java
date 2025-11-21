@@ -19,6 +19,7 @@ public class TotemManager {
     private int tickCounter = 0;
     private boolean needsOffhandRefill = false;
     private boolean needsHotbarRefill = false;
+    private int totemSlotInInventory = -1;
     
     public void tick(MinecraftClient client) {
         if (client.player == null || client.world == null) return;
@@ -45,7 +46,7 @@ public class TotemManager {
     private void checkTotemStatus(MinecraftClient client) {
         PlayerInventory inventory = client.player.getInventory();
         
-        // Check offhand
+        // Check offhand (slot 40 in player inventory)
         ItemStack offhandStack = inventory.offHand.get(0);
         boolean hasOffhandTotem = offhandStack.getItem() == Items.TOTEM_OF_UNDYING;
         
@@ -59,10 +60,27 @@ public class TotemManager {
             needsOffhandRefill = !hasOffhandTotem;
             needsHotbarRefill = !hasHotbarTotem;
             
+            // Check if totems are available in inventory
+            if (findTotemInInventory(inventory) == -1) {
+                // No totems available, do nothing
+                return;
+            }
+            
             // Start with double hand delay
             currentState = State.WAITING_DOUBLE_HAND;
             tickCounter = 0;
         }
+    }
+    
+    private int findTotemInInventory(PlayerInventory inventory) {
+        // Search main inventory (slots 9-35) for totems
+        for (int i = 9; i < 36; i++) {
+            ItemStack stack = inventory.getStack(i);
+            if (stack.getItem() == Items.TOTEM_OF_UNDYING) {
+                return i;
+            }
+        }
+        return -1;
     }
     
     private void handleDoubleHandDelay(MinecraftClient client) {
@@ -76,15 +94,7 @@ public class TotemManager {
     private void handleOpenInventoryDelay(MinecraftClient client) {
         tickCounter++;
         if (tickCounter >= AutoInventoryTotem.getOpenInventoryDelay()) {
-            // Open inventory
-            if (client.player != null) {
-                client.player.networkHandler.sendPacket(
-                    new net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket(
-                        client.player,
-                        net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket.Mode.OPEN_INVENTORY
-                    )
-                );
-            }
+            // We don't actually need to open a GUI, just prepare for slot operations
             currentState = State.WAITING_SWITCH_TOTEMS;
             tickCounter = 0;
         }
@@ -103,10 +113,7 @@ public class TotemManager {
     private void handleCloseInventoryDelay(MinecraftClient client) {
         tickCounter++;
         if (tickCounter >= AutoInventoryTotem.getCloseInventoryDelay()) {
-            // Close inventory by sending close packet
-            if (client.player != null && client.player.currentScreenHandler != null) {
-                client.player.closeHandledScreen();
-            }
+            // Finalize
             currentState = State.IDLE;
             tickCounter = 0;
             needsOffhandRefill = false;
@@ -115,80 +122,87 @@ public class TotemManager {
     }
     
     private void switchTotems(MinecraftClient client) {
+        if (client.player == null || client.interactionManager == null) return;
+        
         PlayerInventory inventory = client.player.getInventory();
         
-        // Find totems in inventory (slots 9-35 are storage inventory)
-        for (int i = 9; i < 36; i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (stack.getItem() == Items.TOTEM_OF_UNDYING) {
-                // Priority: Offhand first
-                if (needsOffhandRefill) {
-                    // Move totem to offhand (slot 45)
+        // Priority: Offhand first
+        if (needsOffhandRefill) {
+            int totemSlot = findTotemInInventory(inventory);
+            if (totemSlot != -1) {
+                // Swap totem from inventory to offhand
+                // Using screen handler slot indices:
+                // Offhand is slot 45 in the player screen handler
+                // Inventory slots 9-35 map to screen handler slots 9-35
+                
+                client.interactionManager.clickSlot(
+                    client.player.playerScreenHandler.syncId,
+                    totemSlot,
+                    0,
+                    SlotActionType.PICKUP,
+                    client.player
+                );
+                
+                client.interactionManager.clickSlot(
+                    client.player.playerScreenHandler.syncId,
+                    45, // Offhand slot in screen handler
+                    0,
+                    SlotActionType.PICKUP,
+                    client.player
+                );
+                
+                // Put back any item that was in offhand
+                ItemStack cursorStack = client.player.currentScreenHandler.getCursorStack();
+                if (!cursorStack.isEmpty()) {
                     client.interactionManager.clickSlot(
                         client.player.playerScreenHandler.syncId,
-                        i,
+                        totemSlot,
                         0,
                         SlotActionType.PICKUP,
                         client.player
                     );
-                    client.interactionManager.clickSlot(
-                        client.player.playerScreenHandler.syncId,
-                        45,
-                        0,
-                        SlotActionType.PICKUP,
-                        client.player
-                    );
-                    // If there's an item in cursor, put it back
-                    if (!client.player.currentScreenHandler.getCursorStack().isEmpty()) {
-                        client.interactionManager.clickSlot(
-                            client.player.playerScreenHandler.syncId,
-                            i,
-                            0,
-                            SlotActionType.PICKUP,
-                            client.player
-                        );
-                    }
-                    needsOffhandRefill = false;
-                    
-                    // Check if we still need to refill hotbar
-                    if (!needsHotbarRefill) {
-                        break;
-                    }
-                    continue;
                 }
                 
-                // Then hotbar slot
-                if (needsHotbarRefill) {
-                    int configuredSlot = AutoInventoryTotem.getConfiguredSlot();
-                    // Move totem to configured hotbar slot
+                needsOffhandRefill = false;
+            }
+        }
+        
+        // Then hotbar slot
+        if (needsHotbarRefill) {
+            int totemSlot = findTotemInInventory(inventory);
+            if (totemSlot != -1) {
+                int configuredSlot = AutoInventoryTotem.getConfiguredSlot();
+                
+                client.interactionManager.clickSlot(
+                    client.player.playerScreenHandler.syncId,
+                    totemSlot,
+                    0,
+                    SlotActionType.PICKUP,
+                    client.player
+                );
+                
+                client.interactionManager.clickSlot(
+                    client.player.playerScreenHandler.syncId,
+                    configuredSlot,
+                    0,
+                    SlotActionType.PICKUP,
+                    client.player
+                );
+                
+                // Put back any item that was in the slot
+                ItemStack cursorStack = client.player.currentScreenHandler.getCursorStack();
+                if (!cursorStack.isEmpty()) {
                     client.interactionManager.clickSlot(
                         client.player.playerScreenHandler.syncId,
-                        i,
+                        totemSlot,
                         0,
                         SlotActionType.PICKUP,
                         client.player
                     );
-                    client.interactionManager.clickSlot(
-                        client.player.playerScreenHandler.syncId,
-                        configuredSlot,
-                        0,
-                        SlotActionType.PICKUP,
-                        client.player
-                    );
-                    // If there's an item in cursor, put it back
-                    if (!client.player.currentScreenHandler.getCursorStack().isEmpty()) {
-                        client.interactionManager.clickSlot(
-                            client.player.playerScreenHandler.syncId,
-                            i,
-                            0,
-                            SlotActionType.PICKUP,
-                            client.player
-                        );
-                    }
-                    needsHotbarRefill = false;
-                    break;
                 }
+                
+                needsHotbarRefill = false;
             }
         }
     }
-}
+    }
