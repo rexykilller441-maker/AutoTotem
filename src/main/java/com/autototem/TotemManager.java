@@ -77,7 +77,14 @@ public class TotemManager {
         tickCounter++;
         if (tickCounter >= AutoInventoryTotem.getOpenInventoryDelay()) {
             // Open inventory
-            client.player.openHandledScreen(client.player.playerScreenHandler);
+            if (client.player != null) {
+                client.player.networkHandler.sendPacket(
+                    new net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket(
+                        client.player,
+                        net.minecraft.network.packet.c2s.play.ClientCommandC2SPacket.Mode.OPEN_INVENTORY
+                    )
+                );
+            }
             currentState = State.WAITING_SWITCH_TOTEMS;
             tickCounter = 0;
         }
@@ -96,8 +103,10 @@ public class TotemManager {
     private void handleCloseInventoryDelay(MinecraftClient client) {
         tickCounter++;
         if (tickCounter >= AutoInventoryTotem.getCloseInventoryDelay()) {
-            // Close inventory
-            client.player.closeHandledScreen();
+            // Close inventory by sending close packet
+            if (client.player != null && client.player.currentScreenHandler != null) {
+                client.player.closeHandledScreen();
+            }
             currentState = State.IDLE;
             tickCounter = 0;
             needsOffhandRefill = false;
@@ -182,4 +191,4 @@ public class TotemManager {
             }
         }
     }
-    }
+}
