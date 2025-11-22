@@ -52,8 +52,8 @@ public class ConfigManager {
                 saveConfig(); // create default
             }
         } catch (JsonSyntaxException | IOException e) {
-            // fallback to defaults
             current = new ConfigData();
+            AutoInventoryTotem.LOGGER.warn("Failed to parse config, using defaults: {}", e.toString());
         }
 
         // Apply loaded config to runtime
@@ -96,4 +96,4 @@ public class ConfigManager {
             AutoInventoryTotem.LOGGER.warn("Failed to save autotoem config: {}", e.toString());
         }
     }
-              }
+}
