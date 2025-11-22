@@ -12,33 +12,33 @@ public class TotemCommand {
 
     public static void register() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
-            registerCommand(dispatcher);
+            registerCommands(dispatcher);
         });
     }
 
-    private static void registerCommand(CommandDispatcher<FabricClientCommandSource> dispatcher) {
+    private static void registerCommands(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(ClientCommandManager.literal("tt")
             // enable / disable
             .then(ClientCommandManager.literal("enable")
-                .executes(ctx -> toggleMod(ctx, true)))
+                .executes(ctx -> { AutoInventoryTotem.setModEnabled(true); ctx.getSource().sendFeedback(Text.literal("AutoTotem Enabled")); return 1; }))
             .then(ClientCommandManager.literal("disable")
-                .executes(ctx -> toggleMod(ctx, false)))
+                .executes(ctx -> { AutoInventoryTotem.setModEnabled(false); ctx.getSource().sendFeedback(Text.literal("AutoTotem Disabled")); return 1; }))
 
             // gui
             .then(ClientCommandManager.literal("gui")
                 .executes(ctx -> {
                     MinecraftClient mc = MinecraftClient.getInstance();
                     mc.setScreen(SettingsScreen.create(mc.currentScreen));
-                    ctx.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aOpened Settings GUI"));
+                    ctx.getSource().sendFeedback(Text.literal("Opened AutoTotem Settings GUI"));
                     return 1;
                 })
             )
 
             // mode
             .then(ClientCommandManager.literal("mode")
-                .then(ClientCommandManager.literal("fast").executes(ctx -> setMode(ctx, "fast")))
-                .then(ClientCommandManager.literal("semi").executes(ctx -> setMode(ctx, "semi")))
-                .then(ClientCommandManager.literal("visible").executes(ctx -> setMode(ctx, "visible")))
+                .then(ClientCommandManager.literal("fast").executes(ctx -> setMode(ctx, AutoInventoryTotem.Mode.FAST)))
+                .then(ClientCommandManager.literal("semi").executes(ctx -> setMode(ctx, AutoInventoryTotem.Mode.SEMI)))
+                .then(ClientCommandManager.literal("visible").executes(ctx -> setMode(ctx, AutoInventoryTotem.Mode.VISIBLE)))
             )
 
             // slot
@@ -59,7 +59,8 @@ public class TotemCommand {
                         .executes(context -> setDelay(context, "switchtotems"))))
                 .then(ClientCommandManager.literal("closeinventory")
                     .then(ClientCommandManager.argument("ticks", IntegerArgumentType.integer(0, 100))
-                        .executes(context -> setDelay(context, "closeinventory")))))
+                        .executes(context -> setDelay(context, "closeinventory"))))
+            )
 
             // check / status / info / help
             .then(ClientCommandManager.literal("check")
@@ -75,12 +76,8 @@ public class TotemCommand {
 
     private static int setSlot(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> context) {
         int slotNumber = IntegerArgumentType.getInteger(context, "slotNumber");
-        int slotIndex = slotNumber - 1;
-
-        AutoInventoryTotem.setConfiguredSlot(slotIndex);
-        context.getSource().sendFeedback(
-            Text.literal("§6[AutoTotem] §aConfigured hotbar slot set to: §e" + slotNumber)
-        );
+        AutoInventoryTotem.setConfiguredSlot(slotNumber - 1);
+        context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aConfigured hotbar slot set to: §e" + slotNumber));
         return 1;
     }
 
@@ -88,40 +85,19 @@ public class TotemCommand {
         int ticks = IntegerArgumentType.getInteger(context, "ticks");
 
         switch (delayType) {
-            case "doublehand":
-                AutoInventoryTotem.setDoubleHandDelay(ticks);
-                context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aDouble hand delay set to: §e" + ticks + " ticks"));
-                break;
-            case "openinventory":
-                AutoInventoryTotem.setOpenInventoryDelay(ticks);
-                context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aOpen inventory delay set to: §e" + ticks + " ticks"));
-                break;
-            case "switchtotems":
-                AutoInventoryTotem.setSwitchTotemsDelay(ticks);
-                context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aSwitch totems delay set to: §e" + ticks + " ticks"));
-                break;
-            case "closeinventory":
-                AutoInventoryTotem.setCloseInventoryDelay(ticks);
-                context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aClose inventory delay set to: §e" + ticks + " ticks"));
-                break;
+            case "doublehand" -> AutoInventoryTotem.setDoubleHandDelay(ticks);
+            case "openinventory" -> AutoInventoryTotem.setOpenInventoryDelay(ticks);
+            case "switchtotems" -> AutoInventoryTotem.setSwitchTotemsDelay(ticks);
+            case "closeinventory" -> AutoInventoryTotem.setCloseInventoryDelay(ticks);
         }
 
+        context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §a" + delayType + " delay set to: §e" + ticks + " ticks"));
         return 1;
     }
 
-    private static int setMode(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> context, String mode) {
-        switch (mode.toLowerCase()) {
-            case "fast" -> AutoInventoryTotem.setRefillMode(AutoInventoryTotem.Mode.FAST);
-            case "semi" -> AutoInventoryTotem.setRefillMode(AutoInventoryTotem.Mode.SEMI);
-            case "visible" -> AutoInventoryTotem.setRefillMode(AutoInventoryTotem.Mode.VISIBLE);
-        }
-        context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aMode set to: §e" + AutoInventoryTotem.getRefillMode().name()));
-        return 1;
-    }
-
-    private static int toggleMod(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> context, boolean enable) {
-        AutoInventoryTotem.setModEnabled(enable);
-        context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aMod " + (enable ? "Enabled" : "Disabled")));
+    private static int setMode(com.mojang.brigadier.context.CommandContext<FabricClientCommandSource> context, AutoInventoryTotem.Mode mode) {
+        AutoInventoryTotem.setRefillMode(mode);
+        context.getSource().sendFeedback(Text.literal("§6[AutoTotem] §aMode set to: §e" + mode.name()));
         return 1;
     }
 
@@ -136,7 +112,6 @@ public class TotemCommand {
         context.getSource().sendFeedback(Text.literal("§eSwitch Totems Delay: §b" + AutoInventoryTotem.getSwitchTotemsDelay() + " ticks"));
         context.getSource().sendFeedback(Text.literal("§eClose Inventory Delay: §b" + AutoInventoryTotem.getCloseInventoryDelay() + " ticks"));
         context.getSource().sendFeedback(Text.literal("§6§m-----------------------------------------------------"));
-
         return 1;
     }
 
