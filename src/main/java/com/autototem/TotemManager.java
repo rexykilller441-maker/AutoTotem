@@ -26,11 +26,11 @@ public class TotemManager {
     private boolean needsOffhand = false;
     private boolean needsHotbar = false;
 
-    // Screen-handler indices
-    private static final int STORAGE_START = 9;   // storage area 9..35
+    // Screen-handler indices (server expects these indices)
+    private static final int STORAGE_START = 9;   // 9..35
     private static final int STORAGE_END = 35;
     private static final int HOTBAR_SCREEN_BASE = 36; // 36 + hotbarIndex (0..8)
-    private static final int OFFHAND_SCREEN_SLOT = 45; // offhand slot
+    private static final int OFFHAND_SCREEN_SLOT = 45; // offhand
 
     public void tick(MinecraftClient client) {
         if (client == null || client.player == null || client.world == null) return;
@@ -52,15 +52,14 @@ public class TotemManager {
         boolean hasOffhand = inv.offHand.get(0).getItem() == Items.TOTEM_OF_UNDYING;
         boolean hasHotbar = inv.getStack(AutoInventoryTotem.getConfiguredSlot()).getItem() == Items.TOTEM_OF_UNDYING;
 
-        needsOffhand = AutoInventoryTotem.getConfiguredSlot() >= 0 && !hasOffhand; // refill offhand if missing
+        needsOffhand = !hasOffhand;
         needsHotbar = !hasHotbar;
 
         if (!needsOffhand && !needsHotbar) return;
 
-        // check if any totem in storage
+        // Is there a totem in storage?
         if (findTotemInStorage(inv) == -1) return;
 
-        // start
         state = State.WAITING_DOUBLEHAND;
         tickCounter = 0;
     }
@@ -77,13 +76,12 @@ public class TotemManager {
         AutoInventoryTotem.Mode mode = AutoInventoryTotem.getRefillMode();
 
         if (mode == AutoInventoryTotem.Mode.FAST) {
-            // no GUI
             state = State.SWITCHING_TOTEMS;
             tickCounter = 0;
             return;
         }
 
-        // OPEN GUI for SEMI and VISIBLE
+        // Open actual inventory (SEMI and VISIBLE)
         client.setScreen(new InventoryScreen(client.player));
         state = State.WAITING_OPEN;
         tickCounter = 0;
@@ -101,9 +99,7 @@ public class TotemManager {
         // Offhand first
         if (needsOffhand) {
             int from = findTotemInStorage(inv);
-            if (from != -1) {
-                safeSwap(syncId, from, OFFHAND_SCREEN_SLOT, client);
-            }
+            if (from != -1) safeSwap(syncId, from, OFFHAND_SCREEN_SLOT, client);
             needsOffhand = false;
         }
 
@@ -112,23 +108,20 @@ public class TotemManager {
             int from = findTotemInStorage(inv);
             if (from != -1) {
                 int hotbarIndex = AutoInventoryTotem.getConfiguredSlot(); // 0..8
-                int hotbarScreenSlot = HOTBAR_SCREEN_BASE + Math.max(0, Math.min(8, hotbarIndex));
-                safeSwap(syncId, from, hotbarScreenSlot, client);
+                int hotbarSlot = HOTBAR_SCREEN_BASE + Math.max(0, Math.min(8, hotbarIndex));
+                safeSwap(syncId, from, hotbarSlot, client);
             }
             needsHotbar = false;
         }
 
-        // Decide next state depending on mode
         AutoInventoryTotem.Mode mode = AutoInventoryTotem.getRefillMode();
         if (mode == AutoInventoryTotem.Mode.SEMI) {
-            // close quickly
             state = State.CLOSING_INVENTORY;
             tickCounter = 0;
         } else if (mode == AutoInventoryTotem.Mode.VISIBLE) {
-            // wait so user can see the swap
             state = State.WAITING_CLOSE;
             tickCounter = 0;
-        } else { // FAST
+        } else {
             finish();
         }
     }
@@ -150,8 +143,8 @@ public class TotemManager {
 
     private int findTotemInStorage(PlayerInventory inv) {
         for (int i = STORAGE_START; i <= STORAGE_END; i++) {
-            ItemStack stack = inv.getStack(i);
-            if (stack != null && stack.getItem() == Items.TOTEM_OF_UNDYING) return i;
+            ItemStack s = inv.getStack(i);
+            if (s != null && s.getItem() == Items.TOTEM_OF_UNDYING) return i;
         }
         return -1;
     }
@@ -161,7 +154,6 @@ public class TotemManager {
             client.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, client.player);
             client.interactionManager.clickSlot(syncId, toSlot, 0, SlotActionType.PICKUP, client.player);
 
-            // if cursor contains something, return to source slot
             ItemStack cursor = client.player.currentScreenHandler.getCursorStack();
             if (cursor != null && !cursor.isEmpty()) {
                 client.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, client.player);
@@ -170,4 +162,4 @@ public class TotemManager {
             AutoInventoryTotem.LOGGER.warn("safeSwap failed (from={}, to={}): {}", fromSlot, toSlot, e.toString());
         }
     }
-                                                                     }
+    }
