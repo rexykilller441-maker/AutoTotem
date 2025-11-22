@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "id": "autoinventorytotem",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "name": "AutoInventoryTotem",
   "description": "Automatically refills totems in offhand and configured hotbar slot",
   "authors": [
-    "YourName"
+    "REXYKILLER441"
   ],
   "contact": {
     "homepage": "",
