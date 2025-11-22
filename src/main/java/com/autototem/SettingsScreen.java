@@ -18,22 +18,23 @@ public class SettingsScreen {
 
         ConfigCategory general = builder.getOrCreateCategory(Text.literal("General"));
 
-        // Enable
+        // Enable / Disable
         general.addEntry(entryBuilder.startBooleanToggle(Text.literal("Enable Mod"), AutoInventoryTotem.isModEnabled())
                 .setSaveConsumer(val -> { AutoInventoryTotem.setModEnabled(val); ConfigManager.saveConfig(); })
                 .build());
 
-        // Mode selection (enum)
+        // Mode selector (enum)
         general.addEntry(entryBuilder.startEnumSelector(Text.literal("Refill Animation Mode"), AutoInventoryTotem.Mode.class, AutoInventoryTotem.getRefillMode())
                 .setDefaultValue(AutoInventoryTotem.Mode.FAST)
                 .setSaveConsumer(val -> { AutoInventoryTotem.setRefillMode(val); ConfigManager.saveConfig(); })
                 .build());
 
-        // Hotbar slot (0..8 shown as 1..9)
+        // Hotbar slot (1..9 displayed, stored 0..8)
         general.addEntry(entryBuilder.startIntField(Text.literal("Hotbar Slot (1-9)"), AutoInventoryTotem.getConfiguredSlot() + 1)
                 .setSaveConsumer(val -> {
                     try {
-                        int parsed = Math.max(1, Math.min(9, Integer.parseInt(val.toString())));
+                        int parsed = Integer.parseInt(val.toString());
+                        parsed = Math.max(1, Math.min(9, parsed));
                         AutoInventoryTotem.setConfiguredSlot(parsed - 1);
                         ConfigManager.saveConfig();
                     } catch (Exception ignored) {}
@@ -42,19 +43,19 @@ public class SettingsScreen {
 
         // Delays
         general.addEntry(entryBuilder.startIntField(Text.literal("Double Hand Delay (ticks)"), AutoInventoryTotem.getDoubleHandDelay())
-                .setSaveConsumer(val -> { AutoInventoryTotem.setDoubleHandDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); })
+                .setSaveConsumer(val -> { try { AutoInventoryTotem.setDoubleHandDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); } catch (Exception ignored) {} })
                 .build());
 
         general.addEntry(entryBuilder.startIntField(Text.literal("Open Inventory Delay (ticks)"), AutoInventoryTotem.getOpenInventoryDelay())
-                .setSaveConsumer(val -> { AutoInventoryTotem.setOpenInventoryDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); })
+                .setSaveConsumer(val -> { try { AutoInventoryTotem.setOpenInventoryDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); } catch (Exception ignored) {} })
                 .build());
 
         general.addEntry(entryBuilder.startIntField(Text.literal("Switch Totems Delay (ticks)"), AutoInventoryTotem.getSwitchTotemsDelay())
-                .setSaveConsumer(val -> { AutoInventoryTotem.setSwitchTotemsDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); })
+                .setSaveConsumer(val -> { try { AutoInventoryTotem.setSwitchTotemsDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); } catch (Exception ignored) {} })
                 .build());
 
         general.addEntry(entryBuilder.startIntField(Text.literal("Close Inventory Delay (ticks)"), AutoInventoryTotem.getCloseInventoryDelay())
-                .setSaveConsumer(val -> { AutoInventoryTotem.setCloseInventoryDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); })
+                .setSaveConsumer(val -> { try { AutoInventoryTotem.setCloseInventoryDelay(Integer.parseInt(val.toString())); ConfigManager.saveConfig(); } catch (Exception ignored) {} })
                 .build());
 
         return builder.build();
