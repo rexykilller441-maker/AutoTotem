@@ -97,4 +97,4 @@ public class TotemCommand {
         
         return 1;
     }
-            }
+}
