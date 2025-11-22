@@ -1,174 +1,149 @@
 package com.autototem;
 
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ingame.InventoryScreen;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
 import net.minecraft.screen.slot.SlotActionType;
 
-/**
- * TotemManager
- * - Correct screen-handler slot mappings:
- *   * inventory storage slots: 9..35
- *   * hotbar screen slots: 36..44  (use 36 + hotbarIndex)
- *   * offhand screen slot: 45
- */
 public class TotemManager {
 
     private enum State {
         IDLE,
         WAITING_DOUBLE_HAND,
-        WAITING_OPEN_INVENTORY,
-        WAITING_SWITCH_TOTEMS,
-        WAITING_CLOSE_INVENTORY
+        OPENING_INVENTORY,
+        WAITING_OPEN,
+        SWITCHING_TOTEMS,
+        CLOSING_INVENTORY,
+        WAITING_CLOSE
     }
 
-    private static final int STORAGE_START = 9;   // storage area (in player inventory)
-    private static final int STORAGE_END = 35;
-    private static final int HOTBAR_SCREEN_BASE = 36; // screen slot base for hotbar
-    private static final int OFFHAND_SCREEN_SLOT = 45; // raw GUI slot for offhand
+    private State state = State.IDLE;
+    private int ticks = 0;
 
-    private State currentState = State.IDLE;
-    private int tickCounter = 0;
-
-    private boolean needsOffhandRefill = false;
-    private boolean needsHotbarRefill = false;
+    private boolean needOffhand = false;
+    private boolean needHotbar = false;
 
     public void tick(MinecraftClient client) {
-        if (client == null || client.player == null || client.world == null) return;
+        if (!AutoInventoryTotem.isEnabled()) return;
+        if (client.player == null || client.world == null) return;
 
-        switch (currentState) {
-            case IDLE -> checkTotemStatus(client);
-            case WAITING_DOUBLE_HAND -> handleDoubleHandDelay(client);
-            case WAITING_OPEN_INVENTORY -> handleOpenInventoryDelay(client);
-            case WAITING_SWITCH_TOTEMS -> handleSwitchTotemsDelay(client);
-            case WAITING_CLOSE_INVENTORY -> handleCloseInventoryDelay(client);
+        switch (state) {
+            case IDLE -> check(client);
+            case WAITING_DOUBLE_HAND -> waitDoubleHand(client);
+            case OPENING_INVENTORY -> openInventory(client);
+            case WAITING_OPEN -> waitInventoryOpen(client);
+            case SWITCHING_TOTEMS -> performSwitch(client);
+            case CLOSING_INVENTORY -> closeInventory(client);
+            case WAITING_CLOSE -> waitClose(client);
         }
     }
 
-    private void checkTotemStatus(MinecraftClient client) {
-        PlayerInventory inventory = client.player.getInventory();
+    private void check(MinecraftClient client) {
+        PlayerInventory inv = client.player.getInventory();
 
-        // Offhand check (player inventory API)
-        ItemStack offhandStack = inventory.offHand.get(0);
-        boolean hasOffhandTotem = offhandStack.getItem() == Items.TOTEM_OF_UNDYING;
+        boolean offTotem = inv.offHand.get(0).isOf(Items.TOTEM_OF_UNDYING);
+        boolean hotTotem = inv.getStack(AutoInventoryTotem.getConfiguredSlot()).isOf(Items.TOTEM_OF_UNDYING);
 
-        // Configured hotbar slot (0..8 in player inventory)
-        int configuredSlot = AutoInventoryTotem.getConfiguredSlot();
-        ItemStack hotbarStack = inventory.getStack(configuredSlot);
-        boolean hasHotbarTotem = hotbarStack.getItem() == Items.TOTEM_OF_UNDYING;
+        needOffhand = AutoInventoryTotem.ENABLE_OFFHAND && !offTotem;
+        needHotbar = AutoInventoryTotem.ENABLE_HOTBAR && !hotTotem;
 
-        // Nothing to do
-        if (hasOffhandTotem && hasHotbarTotem) return;
+        if (!(needOffhand || needHotbar)) return;
 
-        // Do we actually have any totems in storage? If none, abort.
-        if (findTotemInInventory(inventory) == -1) return;
+        if (!hasTotem(inv)) return;
 
-        needsOffhandRefill = !hasOffhandTotem;
-        needsHotbarRefill = !hasHotbarTotem;
-
-        // start the sequence
-        currentState = State.WAITING_DOUBLE_HAND;
-        tickCounter = 0;
+        state = State.WAITING_DOUBLE_HAND;
+        ticks = 0;
     }
 
-    private int findTotemInInventory(PlayerInventory inventory) {
-        // search storage (slots 9..35) for a totem
-        for (int i = STORAGE_START; i <= STORAGE_END; i++) {
-            ItemStack stack = inventory.getStack(i);
-            if (stack.getItem() == Items.TOTEM_OF_UNDYING) return i;
+    private boolean hasTotem(PlayerInventory inv) {
+        for (int i = 9; i < 36; i++)
+            if (inv.getStack(i).isOf(Items.TOTEM_OF_UNDYING)) return true;
+        return false;
+    }
+
+    private void waitDoubleHand(MinecraftClient client) {
+        ticks++;
+        if (ticks >= AutoInventoryTotem.getDoubleHandDelay()) {
+            state = State.OPENING_INVENTORY;
+            ticks = 0;
         }
+    }
+
+    private void openInventory(MinecraftClient client) {
+        client.setScreen(new InventoryScreen(client.player));
+        state = State.WAITING_OPEN;
+        ticks = 0;
+    }
+
+    private void waitInventoryOpen(MinecraftClient client) {
+        ticks++;
+        if (ticks >= AutoInventoryTotem.getOpenInventoryDelay()) {
+            state = State.SWITCHING_TOTEMS;
+            ticks = 0;
+        }
+    }
+
+    private int findTotem(PlayerInventory inv) {
+        for (int i = 9; i < 36; i++)
+            if (inv.getStack(i).isOf(Items.TOTEM_OF_UNDYING)) return i;
         return -1;
     }
 
-    private void handleDoubleHandDelay(MinecraftClient client) {
-        tickCounter++;
-        if (tickCounter >= AutoInventoryTotem.getDoubleHandDelay()) {
-            currentState = State.WAITING_OPEN_INVENTORY;
-            tickCounter = 0;
-        }
-    }
+    private void performSwitch(MinecraftClient client) {
+        PlayerInventory inv = client.player.getInventory();
 
-    private void handleOpenInventoryDelay(MinecraftClient client) {
-        tickCounter++;
-        if (tickCounter >= AutoInventoryTotem.getOpenInventoryDelay()) {
-            // We don't need to open the GUI on the client to click player inventory slots;
-            // proceed to slot operations.
-            currentState = State.WAITING_SWITCH_TOTEMS;
-            tickCounter = 0;
-        }
-    }
-
-    private void handleSwitchTotemsDelay(MinecraftClient client) {
-        tickCounter++;
-        if (tickCounter >= AutoInventoryTotem.getSwitchTotemsDelay()) {
-            switchTotems(client);
-            currentState = State.WAITING_CLOSE_INVENTORY;
-            tickCounter = 0;
-        }
-    }
-
-    private void handleCloseInventoryDelay(MinecraftClient client) {
-        tickCounter++;
-        if (tickCounter >= AutoInventoryTotem.getCloseInventoryDelay()) {
-            // finalize and reset
-            currentState = State.IDLE;
-            tickCounter = 0;
-            needsOffhandRefill = false;
-            needsHotbarRefill = false;
-        }
-    }
-
-    private void switchTotems(MinecraftClient client) {
-        if (client.player == null || client.interactionManager == null) return;
-
-        PlayerInventory inventory = client.player.getInventory();
         int syncId = client.player.playerScreenHandler.syncId;
 
-        // Offhand priority
-        if (needsOffhandRefill) {
-            int totemSlot = findTotemInInventory(inventory);
-            if (totemSlot != -1) {
-                safeSwap(syncId, totemSlot, OFFHAND_SCREEN_SLOT, client);
-                needsOffhandRefill = false;
+        // OFFHAND
+        if (needOffhand) {
+            int totSlot = findTotem(inv);
+            if (totSlot != -1) {
+                click(client, syncId, totSlot);
+                click(client, syncId, 45);
+                clickBack(client, syncId, totSlot);
             }
+            needOffhand = false;
         }
 
-        // Hotbar refill (re-find to ensure we didn't use the only totem above)
-        if (needsHotbarRefill) {
-            int totemSlot = findTotemInInventory(inventory);
-            if (totemSlot != -1) {
-                int configuredSlot = AutoInventoryTotem.getConfiguredSlot(); // 0..8
-                int hotbarScreenSlot = HOTBAR_SCREEN_BASE + configuredSlot; // 36..44
-                safeSwap(syncId, totemSlot, hotbarScreenSlot, client);
-                needsHotbarRefill = false;
+        // HOTBAR
+        if (needHotbar) {
+            int totSlot = findTotem(inv);
+            if (totSlot != -1) {
+                int hot = AutoInventoryTotem.getConfiguredSlot();
+                click(client, syncId, totSlot);
+                click(client, syncId, hot);
+                clickBack(client, syncId, totSlot);
             }
+            needHotbar = false;
+        }
+
+        state = State.CLOSING_INVENTORY;
+        ticks = 0;
+    }
+
+    private void click(MinecraftClient c, int syncId, int slot) {
+        c.interactionManager.clickSlot(syncId, slot, 0, SlotActionType.PICKUP, c.player);
+    }
+
+    private void clickBack(MinecraftClient c, int syncId, int slot) {
+        if (!c.player.currentScreenHandler.getCursorStack().isEmpty()) {
+            click(c, syncId, slot);
         }
     }
 
-    /**
-     * Performs a safe swap: pickup from `fromSlot`, click `toSlot`, and if cursor still has something,
-     * put it back into `fromSlot`. This mirrors how a player would swap items in the inventory GUI.
-     *
-     * Note: clickSlot uses raw screen slot indices (the same indices the server expects).
-     */
-    private void safeSwap(int syncId, int fromSlot, int toSlot, MinecraftClient client) {
-        try {
-            // pickup from source
-            client.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, client.player);
+    private void closeInventory(MinecraftClient client) {
+        client.player.closeScreen();
+        state = State.WAITING_CLOSE;
+        ticks = 0;
+    }
 
-            // place into destination (may swap with whatever was there)
-            client.interactionManager.clickSlot(syncId, toSlot, 0, SlotActionType.PICKUP, client.player);
-
-            // if cursor still contains an item (the previous destination item), put it back to source
-            ItemStack cursor = client.player.currentScreenHandler.getCursorStack();
-            if (!cursor.isEmpty()) {
-                client.interactionManager.clickSlot(syncId, fromSlot, 0, SlotActionType.PICKUP, client.player);
-            }
-        } catch (Exception e) {
-            // defensive: don't crash the client mod if something goes wrong
-            // (log via your mod logger if desired)
-            AutoInventoryTotem.LOGGER.warn("safeSwap failed (from={}, to={}): {}", fromSlot, toSlot, e.toString());
+    private void waitClose(MinecraftClient client) {
+        ticks++;
+        if (ticks >= AutoInventoryTotem.getCloseInventoryDelay()) {
+            state = State.IDLE;
+            ticks = 0;
         }
     }
-            }
+}
